@@ -1,0 +1,103 @@
+name: web-preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-preview-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # Fork PRs never deploy, and previews exist only at level v3.
+    if: github.event.pull_request.head.repo.full_name == github.repository && (vars.TRIAGE_LEVEL || 'v3') == 'v3'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+      WEB_PREVIEW_BUCKET: ${{ vars.WEB_PREVIEW_BUCKET }}
+      WEB_PREVIEW_DOMAIN: ${{ vars.WEB_PREVIEW_DOMAIN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Find the ticket stage
+        id: stage
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          stage=$(node scripts/ticket-stage.mjs)
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.PREVIEW_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Find the API for this ticket
+        id: api
+        env:
+          STAGE: ${{ steps.stage.outputs.stage }}
+        run: |
+          api_url() {
+            aws cloudformation describe-stacks --stack-name "$1" \
+              --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" \
+              --output text 2>/dev/null || true
+          }
+          url=$(api_url "inv-api-preview-$STAGE")
+          source="inv-api-preview-$STAGE"
+          if [ -z "$url" ] || [ "$url" = "None" ]; then
+            url=$(api_url inv-api-dev)
+            source="inv-api-dev"
+          fi
+          if [ -z "$url" ] || [ "$url" = "None" ]; then
+            echo "::error::Neither inv-api-preview-$STAGE nor inv-api-dev has an ApiUrl output."
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+
+      - name: Write config.js and preview.json
+        id: site
+        env:
+          STAGE: ${{ steps.stage.outputs.stage }}
+          API_URL: ${{ steps.api.outputs.url }}
+        run: |
+          url=$(node scripts/write-config.mjs src/config.js preview.json)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the site
+        env:
+          STAGE: ${{ steps.stage.outputs.stage }}
+        run: aws s3 sync src/ "s3://$WEB_PREVIEW_BUCKET/$STAGE/" --delete --cache-control no-cache
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview
+          path: preview.json
+          if-no-files-found: error
+
+      - name: Summary
+        env:
+          WEB_URL: ${{ steps.site.outputs.url }}
+          API_SOURCE: ${{ steps.api.outputs.source }}
+        run: |
+          {
+            echo "### Web preview"
+            echo "- Site: $WEB_URL"
+            echo "- API: \`$API_SOURCE\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,66 @@
+name: deploy-dev
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-2' }}
+      WEB_PREVIEW_BUCKET: ${{ vars.WEB_PREVIEW_BUCKET }}
+      WEB_PREVIEW_DOMAIN: ${{ vars.WEB_PREVIEW_DOMAIN }}
+      STAGE: dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Find the dev API
+        id: api
+        run: |
+          url=$(aws cloudformation describe-stacks --stack-name inv-api-dev \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" --output text)
+          if [ -z "$url" ] || [ "$url" = "None" ]; then
+            echo "::error::inv-api-dev has no ApiUrl output."
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Write config.js
+        id: site
+        env:
+          API_URL: ${{ steps.api.outputs.url }}
+        run: |
+          url=$(node scripts/write-config.mjs src/config.js)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the site
+        run: aws s3 sync src/ "s3://$WEB_PREVIEW_BUCKET/dev/" --delete --cache-control no-cache
+
+      - name: Summary
+        env:
+          WEB_URL: ${{ steps.site.outputs.url }}
+        run: echo "### Dev site"$'\n'"- $WEB_URL" >> "$GITHUB_STEP_SUMMARY"

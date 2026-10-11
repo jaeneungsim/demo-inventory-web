@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Rejects commit messages without a ticket key such as INV-123.
+set -euo pipefail
+
+message_file="$1"
+first_line=$(head -n 1 "$message_file")
+
+case "$first_line" in
+  Merge* | Revert* | fixup!* | squash!*) exit 0 ;;
+esac
+
+if grep -v '^#' "$message_file" | grep -Eq '(^|[^A-Za-z0-9])INV-[0-9]+([^0-9]|$)'; then
+  exit 0
+fi
+
+echo "commit-msg: add the ticket key to the message, for example \"INV-123: add stock to the detail page\"." >&2
+exit 1

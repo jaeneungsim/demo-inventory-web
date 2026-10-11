@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Item · Inventory</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="config.js"></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body data-page="detail">
+    <header class="site-header">
+      <a class="brand" href="index.html">Inventory</a>
+    </header>
+    <main class="container">
+      <p class="back-link"><a href="index.html">← All items</a></p>
+      <p class="status" data-status role="status" aria-live="polite">Loading the item…</p>
+      <article class="item-detail" data-item hidden>
+        <h1 data-field="name"></h1>
+        <dl class="facts">
+          <div class="fact">
+            <dt>Price</dt>
+            <dd data-field="price"></dd>
+          </div>
+          <div class="fact">
+            <dt>Item ID</dt>
+            <dd data-field="id"></dd>
+          </div>
+        </dl>
+      </article>
+    </main>
+  </body>
+</html>
