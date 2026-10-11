@@ -17,3 +17,10 @@ export function formatName(value) {
   const name = typeof value === 'string' ? value.trim() : '';
   return name === '' ? 'Unnamed item' : name;
 }
+
+export function formatStock(value) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    return MISSING;
+  }
+  return value === 0 ? 'Out of stock' : `${value} in stock`;
+}
