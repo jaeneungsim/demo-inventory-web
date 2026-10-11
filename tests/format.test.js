@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { formatName, formatPrice, MISSING } from '../src/lib/format.js';
+import { formatName, formatPrice, formatStock, MISSING } from '../src/lib/format.js';
 
 test('formatPrice formats amounts as Australian dollars', () => {
   assert.equal(formatPrice(12.5), '$12.50');
@@ -24,4 +24,19 @@ test('formatName trims names and falls back for empty ones', () => {
   assert.equal(formatName(''), 'Unnamed item');
   assert.equal(formatName(undefined), 'Unnamed item');
   assert.equal(formatName(42), 'Unnamed item');
+});
+
+test('formatStock shows the units in stock', () => {
+  assert.equal(formatStock(5), '5 in stock');
+  assert.equal(formatStock(1), '1 in stock');
+});
+
+test('formatStock says out of stock at zero', () => {
+  assert.equal(formatStock(0), 'Out of stock');
+});
+
+test('formatStock shows a dash for missing or invalid stock', () => {
+  for (const value of [undefined, null, -1, 2.5, '5', Number.NaN]) {
+    assert.equal(formatStock(value), MISSING, `value: ${String(value)}`);
+  }
 });

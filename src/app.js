@@ -1,5 +1,5 @@
 import { fetchJson, itemsUrl, itemUrl, normalizeBaseUrl, readItemId } from './lib/api.js';
-import { formatName, formatPrice } from './lib/format.js';
+import { formatName, formatPrice, formatStock } from './lib/format.js';
 
 function showStatus(message, { error = false } = {}) {
   const status = document.querySelector('[data-status]');
@@ -68,6 +68,7 @@ async function renderDetail(baseUrl, id) {
   const name = formatName(data?.name);
   article.querySelector('[data-field="name"]').textContent = name;
   article.querySelector('[data-field="price"]').textContent = formatPrice(data?.price);
+  article.querySelector('[data-field="stock"]').textContent = formatStock(data?.stock);
   article.querySelector('[data-field="id"]').textContent = String(data?.id ?? id);
   document.title = `${name} · Inventory`;
   article.hidden = false;
